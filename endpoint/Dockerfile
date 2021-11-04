@@ -1,0 +1,10 @@
+FROM python:3
+WORKDIR .
+COPY . .
+CMD ["-i", "service.py"]
+ENTRYPOINT ["python3"]
+LABEL name="a2"
+
+EXPOSE 51510
+EXPOSE 51511
+EXPOSE 51512

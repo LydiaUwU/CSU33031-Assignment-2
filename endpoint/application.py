@@ -1,6 +1,5 @@
 # Simple messaging application
 # Author: Lydia MacBride
-# TODO: Change packet encoding from utf-8
 
 import socket
 import threading
@@ -30,24 +29,31 @@ class RecMessages(threading.Thread):
         while running:
             global s, incoming
             data, address = s.recvfrom(buff_size)
-            msg = data.decode("utf-8")
+            msg = tlv_dec(data)
             timestamp = time.strftime('%H:%M:%S')
-            incoming.append((msg[0], msg[1], timestamp, False))
+            incoming.append((msg.get("name"), msg.get("string"), timestamp))
+
+    pass
 
 
-# TODO: Message Sending thread
+# Message Sending thread
+# TODO: Generalise this
 class SendMessages(threading.Thread):
     def run(self):
         print("Message sending thread starting")
 
         while running:
-            time.sleep(1.0)
-
             for msg in outgoing:
                 print_d(debug, "Sending the message \"" + msg[1] + "\" to " + msg[0])
 
                 global s, loc_port
                 s.sendto(msg_enc(msg[0], msg[1]), ('localhost', loc_port))
+
+                outgoing.remove(msg)
+
+            time.sleep(1.0)
+
+    pass
 
 
 # TODO: User input thread
@@ -55,32 +61,33 @@ class ProcInput(threading.Thread):
     def run(self):
         print("User input thread starting")
 
+        # Bring global variables into scope
+        global name
+        global debug
         global running
+
         while running:
-            user_in = input("\n✨〉")
+            # Set prompt to 💌 when there is unread messages
+            prompt = "✨" if len(incoming) == 0 else "💌"
+            user_in = input("\n" + prompt + "〉")
 
             # Send <msg>
             # TODO: Add recipient parameter
-            # TODO: Character limit of 16 bytes
+            # TODO: Character limit of 2 bytes
             if user_in[0:4] == "send":
-                global name
-                outgoing.append((name, user_in[4:]))
+                outgoing.append((name, user_in[5:]))
 
-            # Test
-            if user_in == "test":
-                global name
-                outgoing.append((name, "SERVICE TEST"))
-
-            # TODO: ls -a
-            # TODO: List only unread messages by default
+            # ls TODO: -a
             elif user_in[0:2] == "ls":
                 for msg in incoming:
                     # TODO: Print message reception time
-                    print(msg[3] + "|" + msg[0] + ": " + msg[1])
+                    print(msg[3] + " | " + msg[0] + ": " + msg[1])
+                    incoming.remove(msg)
+
+                    # TODO: Store removed messages in file
 
             # debug
             elif user_in == "debug":
-                global debug
                 debug = not debug
                 print("Debug output " + "enabled" if debug else "disabled")
 
@@ -89,9 +96,13 @@ class ProcInput(threading.Thread):
                 print("Shutting down")
                 running = False
 
-            # TODO: help
+            # help
             elif user_in == "help":
-                print("HELP")
+                print("send <msg>       Send a message\n"
+                      "ls (-a)          List unread messages (-a to list all messages)\n"
+                      "debug            Toggle debug output\n" 
+                      "exit             Stop and exit application\n"
+                      "help             List available commands")
 
             # Invalid input
             else:
@@ -101,7 +112,7 @@ class ProcInput(threading.Thread):
 
 
 # Main function, will handle launching and managing various threads
-def main():
+def main(name_in):
     print(__name__)
 
     # Initialising socket
@@ -109,10 +120,9 @@ def main():
     global app_port
     s.bind(('localhost', app_port))
 
-    # Request username
+    # Load username from arguments
     global name
-    name = input("Enter your name: ")
-    print("Your name is: " + name)
+    name = name_in
 
     # Start message reception thread
     rec_messages = RecMessages()
@@ -129,18 +139,30 @@ def main():
     # Rejoin threads when exit is run
     while True:
         if not running:
-            # TODO: Send shutdown signal to service
+            print("Stopping threads")
+
+            # Send shutdown signal to service
+            exit_pck = tlv_enc("exit", 0)
+            s.sendto(exit_pck, ("localhost", loc_port))
 
             # Stop threads
-            rec_messages.join()
             send_messages.join()
             proc_input.join()
 
+            # Send exit packet to close packet reception
+            s.sendto(exit_pck, ("localhost", app_port))
+
+            rec_messages.join()
+
             break
 
-    print("Shut down complete!")
+    print("Application shutdown successful!")
 
 
 # For debug purposes, run main if script run at top level
 if __name__ == "__main__":
-    main()
+    # Get username
+    name_main = input("Enter your name: ")
+    print("Your name is: " + name_main)
+
+    main(name_main)
