@@ -26,8 +26,8 @@ class RecMessages(threading.Thread):
     def run(self):
         print("Message reception thread starting")
 
+        global running, s, buff_size, incoming
         while running:
-            global s, incoming
             data, address = s.recvfrom(buff_size)
             msg = tlv_dec(data)
             timestamp = time.strftime('%H:%M:%S')
@@ -42,11 +42,11 @@ class SendMessages(threading.Thread):
     def run(self):
         print("Message sending thread starting")
 
+        global running, s, loc_port
         while running:
             for msg in outgoing:
                 print_d(debug, "Sending the message \"" + msg[1] + "\" to " + msg[0])
 
-                global s, loc_port
                 s.sendto(msg_enc(msg[0], msg[1]), ('localhost', loc_port))
 
                 outgoing.remove(msg)
@@ -62,9 +62,7 @@ class ProcInput(threading.Thread):
         print("User input thread starting")
 
         # Bring global variables into scope
-        global name
-        global debug
-        global running
+        global name, debug, running
 
         while running:
             # Set prompt to 💌 when there is unread messages
@@ -81,7 +79,7 @@ class ProcInput(threading.Thread):
             elif user_in[0:2] == "ls":
                 for msg in incoming:
                     # TODO: Print message reception time
-                    print(msg[3] + " | " + msg[0] + ": " + msg[1])
+                    print(msg[2] + " | " + msg[0] + ": " + msg[1])
                     incoming.remove(msg)
 
                     # TODO: Store removed messages in file
@@ -137,6 +135,7 @@ def main(name_in):
     proc_input.start()
 
     # Rejoin threads when exit is run
+    global running
     while True:
         if not running:
             print("Stopping threads")

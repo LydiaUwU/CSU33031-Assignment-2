@@ -1,5 +1,6 @@
 # Service application to send and receive packets between running applications and the network
 # Author: Lydia MacBride
+# TODO: Remove current test code and swap to connecting to router device
 
 import socket
 import threading
@@ -21,14 +22,15 @@ running = True
 debug = False
 controller = "a2-controller"
 controller_ip = ""
+# TODO: For the purposes of submission 1!!
+router = "a2-router"
+router_ip = ""
 
 # Queues
 incoming = list()
 outgoing = list()
 
 # Devices
-# TODO: This is for the purposes of part 1, will be removed/converted to dealing with routers
-endpoints = dict()
 
 
 # Application thread
@@ -45,7 +47,7 @@ class AppReception(threading.Thread):
     def run(self):
         print("Application message reception thread starting")
 
-        global running, debug, loc, outgoing
+        global running, debug, loc, buff_size, outgoing
         while running:
             data, address = loc.recvfrom(buff_size)
             msg = tlv_dec(data)
@@ -55,8 +57,8 @@ class AppReception(threading.Thread):
             # TODO: Forward messages to external network
             if "name" in msg:
                 print_d(debug, msg.get("name") + ": " + msg.get("string"))
-                # TODO: This is a hack
-                outgoing.append((data, (endpoints.get("ip"), ext_port)))
+                # TODO: Forward to router, only for submission 1
+                outgoing.append((data, (router_ip, ext_port)))
 
             # Exit signal received
             elif "exit" in msg:
@@ -93,7 +95,10 @@ class SendPackets(threading.Thread):
         global running, ext
         while running:
             for pck in outgoing:
+                print_d(debug, "Sending: " + str(pck[0]) + " to: " + pck[1][0])
                 ext.sendto(pck[0], pck[1])
+
+                outgoing.remove(pck)
 
             time.sleep(1)
 
@@ -116,45 +121,20 @@ def main():
     ext.bind(('0.0.0.0', ext_port))
 
     # TODO: Connect to network controller and get and send username
-    """
-    print("Obtaining controller IP")
-    global controller_ip
+    # TODO: Currently connects to a router for the purposes of submission 1
+    print("Obtaining router IP")
+    global router, router_ip
 
     while True:
         try:
-            controller_ip = socket.gethostbyname(controller)
+            router_ip = socket.gethostbyname(router)
         except socket.gaierror:
             continue
         break
-    
 
     # Send new packet to controller
     # TODO: Use packet sending thread and wait for acknowledgement
-    ext.sendto(new_enc(ext_type, name), (controller_ip, ext_port))
-    """
-
-    # TODO: Remove this for future parts
-    # This is a very hacky way to get two endpoints talking to each other!!!!
-    # This will not be used in the final submission
-    hostname = socket.gethostname()
-    print("Hostname is: " + hostname)
-    global endpoints
-    if hostname == "a2-alice":
-        while True:
-            try:
-                bob_ip = socket.gethostbyname("a2-bob")
-                endpoints.update({"ip": bob_ip})
-            except socket.gaierror:
-                continue
-            break
-    else:
-        while True:
-            try:
-                alice_ip = socket.gethostbyname("a2-alice")
-                endpoints.update({"ip": alice_ip})
-            except socket.gaierror:
-                continue
-            break
+    ext.sendto(new_enc(ext_type, name), (router_ip, ext_port))
 
     # Start application thread
     app = Application()
@@ -163,6 +143,14 @@ def main():
     # Start application message reception thread
     app_rep = AppReception()
     app_rep.start()
+
+    # Start external packet reception thread
+    rec_packets = RecPackets()
+    rec_packets.start()
+
+    # Start external packet sending thread
+    send_packets = SendPackets()
+    send_packets.start()
 
     # When application thread ends, rejoin threads and exit
     global running
