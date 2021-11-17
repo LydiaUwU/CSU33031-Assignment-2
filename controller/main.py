@@ -1,11 +1,14 @@
 # Network controller
-# Handles device address assignment and providing routing infomation for devices with unknown recpient
+# Handles device address assignment and providing routing infomation for devices with unknown recipient
 # Author: Lydia MacBride
+# Is aoibhinn liom mo mhná chéile
 
-import socket
+# TODO: Add debug output
+
 import threading
-import time
 from tools import *
+from node import *
+
 
 # Variables
 port = 51510
@@ -14,31 +17,76 @@ s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 running = True
 
 # Queues
-incoming = list()
 outgoing = list()
 
-# Device dictionaries
-endpoints = dict()
+# Node list
+nodes = list()
 
 
-# TODO: Packet reception thread
+# Packet reception thread
 class RecPackets(threading.Thread):
     def run(self):
         print("Packet reception thread starting")
 
-        global running
+        global running, nodes
         while running:
             data, address = s.recvfrom(buff_size)
             pck = tlv_dec(data)
 
             # New device on network
-            if "new" in pck:
-                # TODO: Check device type
-                endpoints.update({pck.get("name"): address})
+            if "new" and "name" in pck:
+                new_node = Node(address, pck.get("new"), pck.get("name"))
 
-                # TODO: For part 1 purposes connect all known devices
-                for name in endpoints:
-                    outgoing.append((new_enc("endpoint", name), (endpoints[name], port)))
+                # Connect to devices on same subnet
+                for node in nodes:
+                    if get_subnet(node.address[0]) == get_subnet(address[0]):
+                        node.connect(new_node)
+
+                # Add node to nodes
+                nodes.append(new_node)
+
+            # Different subnet device found
+            if "route" in pck:
+                for i in nodes:
+                    if i.address == address:
+                        for j in nodes:
+                            if j.address == pck.get("route"):
+                                i.connect(j)
+
+            # Routing information request
+            if "name" and "recipient" in pck:
+                name = pck.get("name")
+
+                # Search for node by name, else use specified address
+                rec = pck.get("recipient")
+
+                if name != "None":
+                    for node in nodes:
+                        if node.name == name:
+                            rec = node.address
+                            break
+
+                route = "None"
+
+                for node in nodes:
+                    if node.address == address:
+                        # Check for pre-existing routing information
+                        if node.routes.get(rec) is not None:
+                            route = node.routes.get(rec)
+                            break
+
+                        # If route not found run find_route()
+                        rec_node = Node(rec, None, name)
+                        find_route(node, rec_node)
+
+                        # Check again for routing information
+                        if node.routes.get(rec) is not None:
+                            route = node.routes.get(rec)
+
+                        break
+
+                # Return routing information
+                outgoing.append((tlv_enc("route", route), address))
 
     pass
 
@@ -53,7 +101,7 @@ class SendPackets(threading.Thread):
             for pck in outgoing:
                 s.sendto(pck[0], pck[1])
 
-            time.sleep(1.0)
+                outgoing.remove(pck)
 
     pass
 

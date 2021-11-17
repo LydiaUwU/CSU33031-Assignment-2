@@ -1,10 +1,7 @@
 # Service application to send and receive packets between running applications and the network
 # Author: Lydia MacBride
-# TODO: Remove current test code and swap to connecting to router device
 
-import socket
 import threading
-import time
 import application
 from tools import *
 
@@ -14,6 +11,7 @@ ext_port = 51510
 loc_port = 51511
 app_port = 51512
 buff_size = 4096
+subnet = ""
 ext = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 loc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 name = ""
@@ -22,15 +20,13 @@ running = True
 debug = False
 controller = "a2-controller"
 controller_ip = ""
-# TODO: For the purposes of submission 1!!
-router = "a2-router"
-router_ip = ""
 
 # Queues
-incoming = list()
 outgoing = list()
 
-# Devices
+# Connected devices
+connections = dict()  # { <NAME>: <NEXT_IP> }
+new_route = ""
 
 
 # Application thread
@@ -47,21 +43,41 @@ class AppReception(threading.Thread):
     def run(self):
         print("Application message reception thread starting")
 
-        global running, debug, loc, buff_size, outgoing
+        global running, debug, loc, buff_size, outgoing, new_route
         while running:
             data, address = loc.recvfrom(buff_size)
-            msg = tlv_dec(data)
-            print_d(debug, msg)
+            pck = tlv_dec(data)
+            print_d(debug, pck)
 
-            # When messages are received
-            # TODO: Forward messages to external network
-            if "name" in msg:
-                print_d(debug, msg.get("name") + ": " + msg.get("string"))
-                # TODO: Forward to router, only for submission 1
-                outgoing.append((data, (router_ip, ext_port)))
+            # When messages are received from app
+            if "recipient" in pck:
+                rec = pck.get("recipient")
+                print_d(debug, rec + ": " + pck.get("name") + ": " + pck.get("string"))
+
+                # If recipient in routing table
+                if rec in connections:
+                    outgoing.append((data, connections.get(rec)))
+
+                # Recipient not found, contact controller
+                else:
+                    print_d(debug, "Recipient not found")
+                    new_route = rec
+                    connections.update({new_route: None})
+
+                    outgoing.append((route_req_enc(rec, None), (controller_ip, ext_port)))
+
+                    # Wait for routing information
+                    while connections.get(new_route) is None:
+                        print_d(debug, "Awaiting package route")
+
+                    # Send to newly routed device
+                    if connections.get(rec) != "None":
+                        outgoing.append((data, connections.get(rec)))
+                    else:
+                        print_d(debug, "Unknown recipient")
 
             # Exit signal received
-            elif "exit" in msg:
+            elif "exit" in pck:
                 print("Exit signal received")
                 running = False
 
@@ -73,7 +89,7 @@ class RecPackets(threading.Thread):
     def run(self):
         print("External packet reception thread starting")
 
-        global running, ext, loc
+        global running, ext, loc, connections, new_route
         while running:
             data, address = ext.recvfrom(buff_size)
             pck = tlv_dec(data)
@@ -82,6 +98,10 @@ class RecPackets(threading.Thread):
             # Message packet received, forward to app
             if "name" and "string" in pck:
                 loc.sendto(data, ('localhost', app_port))
+
+            # Routing information packets
+            if "route" in pck:
+                connections[new_route] = pck.get("route")
 
     pass
 
@@ -99,8 +119,6 @@ class SendPackets(threading.Thread):
                 ext.sendto(pck[0], pck[1])
 
                 outgoing.remove(pck)
-
-            time.sleep(1)
 
     pass
 
@@ -120,21 +138,31 @@ def main():
     loc.bind(('localhost', loc_port))
     ext.bind(('0.0.0.0', ext_port))
 
-    # TODO: Connect to network controller and get and send username
-    # TODO: Currently connects to a router for the purposes of submission 1
-    print("Obtaining router IP")
-    global router, router_ip
+    # Find subnet
+    global subnet
+    subnet = get_subnet(socket.gethostbyname(socket.gethostname()))
 
+    # Connect to network controller and get and send username
+    print("Obtaining controller IP")
+
+    global controller, controller_ip
     while True:
         try:
-            router_ip = socket.gethostbyname(router)
+            controller_ip = socket.gethostbyname(controller)
         except socket.gaierror:
             continue
         break
 
     # Send new packet to controller
     # TODO: Use packet sending thread and wait for acknowledgement
-    ext.sendto(new_enc(ext_type, name), (router_ip, ext_port))
+    ext.sendto(new_enc(ext_type, name), (controller_ip, ext_port))
+
+    # Scan for devices on network and send information to controller
+    ext_devs = find_devices("endpoint", subnet)
+    ext_devs.append(find_devices("router", subnet))
+
+    for dev in ext_devs:
+        ext.sendto(dev, (controller_ip, ext_port))
 
     # Start application thread
     app = Application()

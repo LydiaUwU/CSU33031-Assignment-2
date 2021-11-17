@@ -1,24 +1,25 @@
 # Router device, routes incoming packets towards their destination
 # Author: Lydia MacBride
 
-import socket
 import threading
-import time
 from tools import *
 
 
 # Variables
 port = 51510
 buff_size = 4096
+subnet = ""
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 ext_type = "router"
 running = True
+controller = "a2-controller"
+controller_ip = ""
 
 # Queues
 outgoing = list()
 
-# TODO: This is temporary for the purposes of submission 1
-devices = dict()
+# Connected devices
+connections = dict()  # { <NAME>: <NEXT_IP> }
 
 
 # Packet reception (not run in a thread because packet reception gets weird when threaded)
@@ -26,24 +27,39 @@ class RecPackets(threading.Thread):
     def run(self):
         print("Packet reception thread starting")
 
-        global running, port, s, buff_size, devices
+        global running, port, s, buff_size
         while running:
             data, address = s.recvfrom(buff_size)
             pck = tlv_dec(data)
 
             print(pck)
 
-            # If first time receiving packet from name append to dictionary
-            if pck.get("name") not in devices:
-                devices.update({pck.get("name"): address})
-                print(devices)
+            # When messages are received from app
+            if "recipient" in pck:
+                rec = pck.get("recipient")
+                print(rec + ": " + pck.get("name") + ": " + pck.get("string"))
 
-            # TODO: For submission 1, hardcoded packet forwarding, this will change with name target parameter
-            if pck.get("name") == "alice" and "string" in pck:
-                outgoing.append((data, devices.get("bob")))
-            elif pck.get("name") == "bob" and "string" in pck:
-                outgoing.append((data, devices.get("alice")))
+                # If recipient in routing table
+                if rec in connections:
+                    outgoing.append((data, connections.get(rec)))
 
+                # Recipient not found, contact controller
+                else:
+                    print("Recipient not found")
+                    new_route = rec
+                    connections.update({new_route: None})
+
+                    outgoing.append((route_req_enc(rec, None), (controller_ip, port)))
+
+                    # Wait for routing information
+                    while connections.get(new_route) is None:
+                        print("Awaiting package route")
+
+                    # Send to newly routed device
+                    if connections.get(rec) != "None":
+                        outgoing.append((data, connections.get(rec)))
+                    else:
+                        print("Unknown recipient")
     pass
 
 
@@ -61,8 +77,6 @@ class SendPackets(threading.Thread):
 
                 outgoing.remove(pck)
 
-            time.sleep(1)
-
     pass
 
 
@@ -74,6 +88,32 @@ def main():
     print("Initialising socket")
     global s, port
     s.bind(('0.0.0.0', port))
+
+    # Find subnet
+    global subnet
+    subnet = get_subnet(socket.gethostbyname(socket.gethostname()))
+
+    # Connect to network controller and get and send username
+    print("Obtaining controller IP")
+
+    global controller, controller_ip
+    while True:
+        try:
+            controller_ip = socket.gethostbyname(controller)
+        except socket.gaierror:
+            continue
+        break
+
+    # Send new packet to controller
+    # TODO: Use packet sending thread and wait for acknowledgement
+    s.sendto(new_enc(ext_type, None), (controller_ip, port))
+
+    # Scan for devices on network and send information to controller
+    ext_devs = find_devices("endpoint", subnet)
+    ext_devs.append(find_devices("router", subnet))
+
+    for dev in ext_devs:
+        s.sendto(dev, (controller_ip, port))
 
     # Launch packet reception thread
     rec_packets = RecPackets()
