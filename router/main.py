@@ -106,11 +106,11 @@ def main():
 
     # Send new packet to controller
     # TODO: Use packet sending thread and wait for acknowledgement
-    s.sendto(new_enc(ext_type, None), (controller_ip, port))
+    s.sendto(new_enc(ext_type, socket.gethostname()), (controller_ip, port))
 
     # Scan for devices on network and send information to controller
-    ext_devs = find_devices("endpoint", subnet)
-    ext_devs.append(find_devices("router", subnet))
+    ext_devs = find_devices(subnet, "endpoint")
+    ext_devs += find_devices(subnet, "router")
 
     for dev in ext_devs:
         s.sendto(dev, (controller_ip, port))

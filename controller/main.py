@@ -35,11 +35,13 @@ class RecPackets(threading.Thread):
 
             # New device on network
             if "new" and "name" in pck:
+                print("New device: " + str(pck.get("new")) + ": " + str(pck.get("name")))
                 new_node = Node(address, pck.get("new"), pck.get("name"))
 
                 # Connect to devices on same subnet
                 for node in nodes:
                     if get_subnet(node.address[0]) == get_subnet(address[0]):
+                        print("Connecting to: " + node.address[0])
                         node.connect(new_node)
 
                 # Add node to nodes
@@ -47,6 +49,8 @@ class RecPackets(threading.Thread):
 
             # Different subnet device found
             if "route" in pck:
+                print("Device on multiple subnets: " + str(pck.get("route")))
+
                 for i in nodes:
                     if i.address == address:
                         for j in nodes:
@@ -55,6 +59,7 @@ class RecPackets(threading.Thread):
 
             # Routing information request
             if "name" and "recipient" in pck:
+                print("Routing information request: " + str(pck.get("name")) + ": " + str(pck.get("recipient")))
                 name = pck.get("name")
 
                 # Search for node by name, else use specified address
@@ -71,11 +76,13 @@ class RecPackets(threading.Thread):
                 for node in nodes:
                     if node.address == address:
                         # Check for pre-existing routing information
+                        print("Checking for existing route")
                         if node.routes.get(rec) is not None:
                             route = node.routes.get(rec)
                             break
 
                         # If route not found run find_route()
+                        print("No existing route found, attempting to create one")
                         rec_node = Node(rec, None, name)
                         find_route(node, rec_node)
 
@@ -86,6 +93,7 @@ class RecPackets(threading.Thread):
                         break
 
                 # Return routing information
+                print("Sending route: " + str(route))
                 outgoing.append((tlv_enc("route", route), address))
 
     pass

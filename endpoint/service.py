@@ -51,6 +51,12 @@ class AppReception(threading.Thread):
 
             # When messages are received from app
             if "recipient" in pck:
+                # Enable debug output
+                if pck.get("recipient") == "debug":
+                    print("Service debug " + "enabled" if debug else "disabled")
+                    debug = not debug
+                    continue
+
                 rec = pck.get("recipient")
                 print_d(debug, rec + ": " + pck.get("name") + ": " + pck.get("string"))
 
@@ -158,8 +164,8 @@ def main():
     ext.sendto(new_enc(ext_type, name), (controller_ip, ext_port))
 
     # Scan for devices on network and send information to controller
-    ext_devs = find_devices("endpoint", subnet)
-    ext_devs.append(find_devices("router", subnet))
+    ext_devs = find_devices(subnet, "endpoint")
+    ext_devs += find_devices(subnet, "router")
 
     for dev in ext_devs:
         ext.sendto(dev, (controller_ip, ext_port))

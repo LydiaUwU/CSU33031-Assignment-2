@@ -84,7 +84,7 @@ def tlv_enc(tlv_type, data):
     # String based data types
     # Name, String
     if tlv_type in ["new", "name", "recipient", "string", "route"]:
-        data_enc = data.encode("utf-8")
+        data_enc = str(data).encode("utf-8")
         return type_num.to_bytes(1, 'big') + len(data_enc).to_bytes(2, 'big') + data_enc
 
     # Combination
