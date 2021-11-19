@@ -38,12 +38,23 @@ class Node:
 
 # Find route between source and destination
 # Updates all nodes in route's routing table with discovered route and returns the route
+# Greets: Emmet! For helping me debug this
 def find_route(src, dst):
-    route = find_route_rec(src, dst, list())
+    route = find_route_rec(src, dst, [src])
 
-    for node in route:
-        print("Updating node: " + str(node.address[0]))
-        node.routes.update({dst.address: route[0]})
+    if route is None:
+        print("No route found")
+        return None
+
+    while len(route) > 0:
+        node = route[0]
+
+        if len(route) <= 1:
+            print("Destination reached")
+            node.routes.update({dst.address: route[0]})
+        else:
+            print("Updating node: " + str(node.address[0]) + ", " + str(route[1].address[0]))
+            node.routes.update({dst.address: route[1]})
 
         print(node.routes)
 
@@ -56,6 +67,7 @@ def find_route(src, dst):
 # TODO: Find way to return multiple routes if found, currently inefficient and brute force
 def find_route_rec(src, dst, route):
     print("src: " + str(src.address[0]) + ", dst: " + str(dst.address[0]))
+
     for node in src.connections:
         print("Checking: " + str(node.address[0]))
 
@@ -70,7 +82,10 @@ def find_route_rec(src, dst, route):
             route.append(node)
             for i in route:
                 print(str(i.address[0]) + "\n")
-            return find_route_rec(node, dst, route)
+
+            # Check that node has unsearched connections before recurring
+            if len([e for e in node.connections if e not in route]) != 0:
+                return find_route_rec(node, dst, route)
 
 
 # TODO: Remove this, it's test code
@@ -78,6 +93,8 @@ if __name__ == "__main__":
     a = Node(("0.0.0.0", "0000"), "test", "A")
     b = Node(("0.0.0.1", "0000"), "test", "B")
     c = Node(("0.0.0.2", "0000"), "test", "C")
+    d = Node(("0.0.0.3", "0000"), "test", "D")
     a.connect(b)
     b.connect(c)
-    r = find_route(a, c)
+    c.connect(d)
+    r = find_route(d, a)

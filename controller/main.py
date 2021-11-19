@@ -3,7 +3,7 @@
 # Author: Lydia MacBride
 # Is aoibhinn liom mo mhná chéile
 
-# TODO: Add debug output
+# TODO: Handle devices disconnecting and reconnecting
 
 import threading
 from tools import *
@@ -32,9 +32,10 @@ class RecPackets(threading.Thread):
         while running:
             data, address = s.recvfrom(buff_size)
             pck = tlv_dec(data)
+            print(pck)
 
             # New device on network
-            if "new" and "name" in pck:
+            if "new" in pck and "name" in pck:
                 print("New device: " + str(pck.get("new")) + ": " + str(pck.get("name")))
                 new_node = Node(address, pck.get("new"), pck.get("name"))
 
@@ -58,7 +59,7 @@ class RecPackets(threading.Thread):
                                 i.connect(j)
 
             # Routing information request
-            if "name" and "recipient" in pck:
+            if "name" in pck and "recipient" in pck:
                 print("Routing information request: " + str(pck.get("name")) + ": " + str(pck.get("recipient")))
                 name = pck.get("name")
 
@@ -78,17 +79,22 @@ class RecPackets(threading.Thread):
                         # Check for pre-existing routing information
                         print("Checking for existing route")
                         if node.routes.get(rec) is not None:
-                            route = node.routes.get(rec)
+                            route = node.routes.get(rec).address[0]
                             break
 
                         # If route not found run find_route()
                         print("No existing route found, attempting to create one")
-                        rec_node = Node(rec, None, name)
-                        find_route(node, rec_node)
+                        rec_node = [n for n in nodes if n.address == rec]
+                        if len(rec_node) != 1:
+                            print("Recipient node does not exist")
+                            break
+
+                        print("Searching for: " + str(rec_node[0].address))
+                        find_route(node, rec_node[0])
 
                         # Check again for routing information
                         if node.routes.get(rec) is not None:
-                            route = node.routes.get(rec)
+                            route = node.routes.get(rec).address[0]
 
                         break
 

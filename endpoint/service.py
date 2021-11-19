@@ -53,8 +53,8 @@ class AppReception(threading.Thread):
             if "recipient" in pck:
                 # Enable debug output
                 if pck.get("recipient") == "debug":
-                    print("Service debug " + "enabled" if debug else "disabled")
                     debug = not debug
+                    print("Service debug " + "enabled" if debug else "disabled")
                     continue
 
                 rec = pck.get("recipient")
@@ -62,7 +62,7 @@ class AppReception(threading.Thread):
 
                 # If recipient in routing table
                 if rec in connections:
-                    outgoing.append((data, connections.get(rec)))
+                    outgoing.append((data, (connections.get(rec), ext_port)))
 
                 # Recipient not found, contact controller
                 else:
@@ -78,7 +78,7 @@ class AppReception(threading.Thread):
 
                     # Send to newly routed device
                     if connections.get(rec) != "None":
-                        outgoing.append((data, connections.get(rec)))
+                        outgoing.append((data, (connections.get(rec), ext_port)))
                     else:
                         print_d(debug, "Unknown recipient")
 
