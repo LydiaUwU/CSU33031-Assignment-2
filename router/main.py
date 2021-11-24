@@ -1,11 +1,13 @@
 # Router device, routes incoming packets towards their destination
 # Author: Lydia MacBride
+# TODO: Send a device found packet for all found devices, add hostname to packets
 
 import threading
 from tools import *
 
 
 # Variables
+ip = ""
 port = 51510
 buff_size = 4096
 subnet = ""
@@ -19,7 +21,7 @@ controller_ip = ""
 outgoing = list()
 
 # Connected devices
-connections = dict()  # { <NAME>: <NEXT_IP> }
+connections = dict()  # { <NAME>: <NEXT_HOSTNAME> }
 
 
 # Packet reception (not run in a thread because packet reception gets weird when threaded)
@@ -31,17 +33,18 @@ class RecPackets(threading.Thread):
         while running:
             data, address = s.recvfrom(buff_size)
             pck = tlv_dec(data)
-
+            print("\n")
+            print(address)
             print(pck)
 
-            # When messages are received from app
+            # When messages are received
             if "recipient" in pck:
                 rec = pck.get("recipient")
                 print(rec + ": " + pck.get("name") + ": " + pck.get("string"))
 
                 # If recipient in routing table
                 if rec in connections:
-                    outgoing.append((data, connections.get(rec)))
+                    outgoing.append((data, (connections.get(rec), port)))
 
                 # Recipient not found, contact controller
                 else:
@@ -54,12 +57,19 @@ class RecPackets(threading.Thread):
                     # Wait for routing information
                     while connections.get(new_route) is None:
                         print("Awaiting package route")
+                        new_data, new_address = s.recvfrom(buff_size)
+                        new_pck = tlv_dec(new_data)
+
+                        # Routing information packets
+                        if "route" in new_pck:
+                            connections[new_route] = new_pck.get("route")
 
                     # Send to newly routed device
                     if connections.get(rec) != "None":
-                        outgoing.append((data, connections.get(rec)))
+                        outgoing.append((data, (connections.get(rec), port)))
                     else:
                         print("Unknown recipient")
+
     pass
 
 
@@ -89,9 +99,14 @@ def main():
     global s, port
     s.bind(('0.0.0.0', port))
 
+    # Find ip
+    global ip
+    ip = socket.gethostbyname(socket.gethostname())
+    print("IP: " + ip)
+
     # Find subnet
     global subnet
-    subnet = get_subnet(socket.gethostbyname(socket.gethostname()))
+    subnet = get_subnet(ip)
 
     # Connect to network controller and get and send username
     print("Obtaining controller IP")
@@ -109,8 +124,24 @@ def main():
     s.sendto(new_enc(ext_type, socket.gethostname()), (controller_ip, port))
 
     # Scan for devices on network and send information to controller
-    ext_devs = find_devices(subnet, "endpoint")
-    ext_devs += find_devices(subnet, "router")
+    ext_devs = find_devices(ip, "endpoint")
+
+    for dev in ext_devs:
+        print("Requesting name from: " + dev)
+
+        # Request dev for its name
+        s.sendto(tlv_enc("who", "router"), (dev, port))
+
+        # Wait for response
+        who_is = ""
+        while who_is == "":
+            who_data, who_add = s.recvfrom(buff_size)
+            who_is = tlv_dec(who_data).get("who")
+            print(who_is)
+
+        connections[who_is] = dev
+
+    ext_devs = find_devices(ip, "router")
 
     for dev in ext_devs:
         s.sendto(dev, (controller_ip, port))
