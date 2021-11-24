@@ -50,8 +50,8 @@ def find_route(src, dst):
         node = route[0]
 
         if len(route) <= 1:
-            print("Destination reached")
-            node.routes.update({dst.address: route[0]})
+            print("Destination reached: " + str(dst.address))
+            node.routes.update({dst.address: dst.address})
         else:
             print("Updating node: " + str(node.address[0]) + ", " + str(route[1].address[0]))
             node.routes.update({dst.address: route[1]})
@@ -64,7 +64,7 @@ def find_route(src, dst):
 
 
 # Recursive helper function for find route
-# TODO: Find way to return multiple routes if found, currently inefficient and brute force
+# TODO: Return shortest route, currently returns last found route
 def find_route_rec(src, dst, route):
     print("src: " + str(src.address[0]) + ", dst: " + str(dst.address[0]))
 
@@ -90,11 +90,31 @@ def find_route_rec(src, dst, route):
 
 # TODO: Remove this, it's test code
 if __name__ == "__main__":
-    a = Node(("0.0.0.0", "0000"), "test", "A")
-    b = Node(("0.0.0.1", "0000"), "test", "B")
-    c = Node(("0.0.0.2", "0000"), "test", "C")
-    d = Node(("0.0.0.3", "0000"), "test", "D")
-    a.connect(b)
-    b.connect(c)
-    c.connect(d)
-    r = find_route(d, a)
+    cooper = Node(("coop", ""), "", "Cooper")
+    dougie = Node(("doug", ""), "", "Dougie")
+    harry = Node(("harr", ""), "", "Harry")
+    lucy = Node(("lucy", ""), "", "Lucy")
+    hawk = Node(("hawk", ""), "", "Hawk")
+    gordon = Node(("gord", ""), "", "Gordon")
+    philip = Node(("phil", ""), "", "Philip")
+
+    r0 = Node(("r0", ""), "", "R0")
+    r1 = Node(("r1", ""), "", "R1")
+    r2 = Node(("r2", ""), "", "R2")
+    r3 = Node(("r3", ""), "", "R3")
+    r4 = Node(("r4", ""), "", "R4")
+
+    cooper.connect(dougie)
+    cooper.connect(r0)
+    harry.connect(r2)
+    lucy.connect(r1)
+    hawk.connect(r3)
+    hawk.connect(r4)
+    gordon.connect(r4)
+    r0.connect(r1)
+    r1.connect(r2)
+    r1.connect(r3)
+    r2.connect(r3)
+    r3.connect(r4)
+
+    route_test = find_route(harry, cooper)

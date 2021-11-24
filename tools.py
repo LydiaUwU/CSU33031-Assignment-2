@@ -29,18 +29,34 @@ def print_d(debug, string):
 # Network device finder with different subnets
 # Returns list of connected devices encoded and ready to send to controller
 # Kind of hacky but designed to get around devices being connected to multiple docker networks
-def find_devices(subnet, dev_type, count=5):
+# TODO: Append all found devices
+def find_devices(ip, dev_type, count=9):
     out = list()
 
-    for i in range(0, count + 1):
+    i = 0
+    while i <= count:
         try:
-            dev_ip = socket.gethostbyname(PREFIXES.get(dev_type) + str(i))
+            name = PREFIXES.get(dev_type) + str(i)
+            print("Checking: " + name)
+            dev_ip = socket.gethostbyname(name)
+            print("Device found at: " + str(dev_ip))
 
-            if get_subnet(dev_ip) != subnet:
-                out.append(tlv_enc("route", dev_ip))
+            # Check if this is the searching device's ip
+            print("Matching ip: " + str(ip == dev_ip))
+            if ip != dev_ip:
+
+                if dev_type == "router":
+                    out.append(found_dev_enc(name, dev_ip))
+                else:
+                    out.append(name)
 
         except socket.gaierror:
-            continue
+            print("No device found")
+
+        i += 1
+
+    if len(out) > 0:
+        print(out)
 
     return out
 
@@ -49,7 +65,7 @@ def find_devices(subnet, dev_type, count=5):
 # TLV Types dictionary
 # Any packet with a type that isn't handled will be assigned type "unknown"
 TLV_TYPES = {
-    0: "ack",
+    0: "who",
     1: "new",
     2: "exit",
     3: "name",
@@ -83,7 +99,7 @@ def tlv_enc(tlv_type, data):
 
     # String based data types
     # Name, String
-    if tlv_type in ["new", "name", "recipient", "string", "route"]:
+    if tlv_type in ["who", "new", "name", "recipient", "string", "route"]:
         data_enc = str(data).encode("utf-8")
         return type_num.to_bytes(1, 'big') + len(data_enc).to_bytes(2, 'big') + data_enc
 
@@ -110,7 +126,7 @@ def tlv_dec(packet):
         ret_dict.update({type_val: 0})
 
     # Name, String, Unknown
-    if type_val in ["new", "name", "recipient", "string", "route", "unknown"]:
+    if type_val in ["who", "new", "name", "recipient", "string", "route", "unknown"]:
         ret_dict.update({type_val: packet[3:].decode("utf-8")})
 
     # Combination
@@ -155,6 +171,16 @@ def route_req_enc(name, rec):
 
     # Encode both as combination packet and return
     return tlv_enc("combination", (name_tlv, rec_tlv))
+
+
+# Found device packet
+def found_dev_enc(name, route):
+    # Encode name and route
+    name_tlv = tlv_enc("name", name)
+    route_tlv = tlv_enc("route", route)
+
+    # Encode both as combination packet and return
+    return tlv_enc("combination", (name_tlv, route_tlv))
 
 
 """

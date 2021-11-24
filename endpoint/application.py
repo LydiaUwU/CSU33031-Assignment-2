@@ -77,7 +77,7 @@ class ProcInput(threading.Thread):
                 rec = input_str[1]
                 msg = ' '.join(input_str[2:])
 
-                print("Sending: " + input_str[2])
+                print("Sending: " + msg)
                 outgoing.append(msg_enc(rec, name, msg))
 
             # ls TODO: -a

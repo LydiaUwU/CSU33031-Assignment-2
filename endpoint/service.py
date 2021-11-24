@@ -7,6 +7,7 @@ from tools import *
 
 
 # Variables
+ip = ""
 ext_port = 51510
 loc_port = 51511
 app_port = 51512
@@ -25,7 +26,7 @@ controller_ip = ""
 outgoing = list()
 
 # Connected devices
-connections = dict()  # { <NAME>: <NEXT_IP> }
+connections = dict()  # { <NAME>: <NEXT_HOSTNAME> }
 new_route = ""
 
 
@@ -47,6 +48,8 @@ class AppReception(threading.Thread):
         while running:
             data, address = loc.recvfrom(buff_size)
             pck = tlv_dec(data)
+            print_d(debug, "\n")
+            print_d(debug, address)
             print_d(debug, pck)
 
             # When messages are received from app
@@ -95,10 +98,12 @@ class RecPackets(threading.Thread):
     def run(self):
         print("External packet reception thread starting")
 
-        global running, ext, loc, connections, new_route
+        global running, ext, loc, connections, new_route, name
         while running:
             data, address = ext.recvfrom(buff_size)
             pck = tlv_dec(data)
+            print_d(debug, "\n")
+            print_d(debug, address)
             print_d(debug, pck)
 
             # Message packet received, forward to app
@@ -108,6 +113,11 @@ class RecPackets(threading.Thread):
             # Routing information packets
             if "route" in pck:
                 connections[new_route] = pck.get("route")
+
+            # Who is packets
+            if "who" in pck and pck.get("who") != "router":
+                connections[pck.get("who")] = address[0]
+                outgoing.append((tlv_enc("who", name), address))
 
     pass
 
@@ -144,9 +154,13 @@ def main():
     loc.bind(('localhost', loc_port))
     ext.bind(('0.0.0.0', ext_port))
 
+    # Find ip
+    global ip
+    ip = socket.gethostbyname(socket.gethostname())
+
     # Find subnet
     global subnet
-    subnet = get_subnet(socket.gethostbyname(socket.gethostname()))
+    subnet = get_subnet(ip)
 
     # Connect to network controller and get and send username
     print("Obtaining controller IP")
@@ -164,8 +178,24 @@ def main():
     ext.sendto(new_enc(ext_type, name), (controller_ip, ext_port))
 
     # Scan for devices on network and send information to controller
-    ext_devs = find_devices(subnet, "endpoint")
-    ext_devs += find_devices(subnet, "router")
+    ext_devs = find_devices(ip, "endpoint")
+
+    for dev in ext_devs:
+        print("Requesting name from: " + dev)
+
+        # Request dev for its name
+        ext.sendto(tlv_enc("who", name), (dev, ext_port))
+
+        # Wait for response
+        who_is = ""
+        while who_is == "":
+            who_data, who_add = ext.recvfrom(buff_size)
+            who_is = tlv_dec(who_data).get("who")
+            print(who_is)
+
+        connections[who_is] = dev
+
+    ext_devs = find_devices(ip, "router")
 
     for dev in ext_devs:
         ext.sendto(dev, (controller_ip, ext_port))

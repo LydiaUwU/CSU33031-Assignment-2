@@ -3,8 +3,6 @@
 # Author: Lydia MacBride
 # Is aoibhinn liom mo mhná chéile
 
-# TODO: Handle devices disconnecting and reconnecting
-
 import threading
 from tools import *
 from node import *
@@ -32,30 +30,48 @@ class RecPackets(threading.Thread):
         while running:
             data, address = s.recvfrom(buff_size)
             pck = tlv_dec(data)
+            print("\n")
+            print(address)
             print(pck)
 
             # New device on network
             if "new" in pck and "name" in pck:
                 print("New device: " + str(pck.get("new")) + ": " + str(pck.get("name")))
-                new_node = Node(address, pck.get("new"), pck.get("name"))
+
+                if pck.get("new") == "router":
+                    new_name = socket.gethostbyaddr(address[0])[0].split(".")[0]
+                else:
+                    new_name = pck.get("name")
+
+                print(new_name)
+                new_node = Node(address, pck.get("new"), new_name)
 
                 # Connect to devices on same subnet
+                # TODO: Try handle node connections via devices searching
+                """
                 for node in nodes:
                     if get_subnet(node.address[0]) == get_subnet(address[0]):
                         print("Connecting to: " + node.address[0])
                         node.connect(new_node)
+                """
 
                 # Add node to nodes
                 nodes.append(new_node)
 
             # Different subnet device found
             if "route" in pck:
-                print("Device on multiple subnets: " + str(pck.get("route")))
+                print("Device connection: " + str(pck.get("name")))
 
                 for i in nodes:
                     if i.address == address:
                         for j in nodes:
-                            if j.address == pck.get("route"):
+                            if j.name == pck.get("name") or j.address[0] == pck.get("route"):
+                                # Update name if type is router
+                                if j.type == "router":
+                                    print("Renaming node")
+                                    j.name = pck.get("name")
+
+                                print("Connecting: " + str(i.name) + ", to: " + str(j.name))
                                 i.connect(j)
 
             # Routing information request
@@ -99,7 +115,12 @@ class RecPackets(threading.Thread):
                         break
 
                 # Return routing information
-                print("Sending route: " + str(route))
+                if route != "None":
+                    print(route)
+                    route = socket.gethostbyaddr(route)[0].split(".")[0]
+                    print(route)
+
+                print("Sending route: " + str(route) + ", to: " + str(socket.gethostbyaddr(address[0])))
                 outgoing.append((tlv_enc("route", route), address))
 
     pass
