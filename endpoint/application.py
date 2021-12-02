@@ -1,7 +1,6 @@
 # Simple messaging application
 # Author: Lydia MacBride
 
-import socket
 import threading
 import time
 from tools import *
@@ -78,7 +77,7 @@ class ProcInput(threading.Thread):
                 rec = input_str[1]
                 msg = ' '.join(input_str[2:])
 
-                print("Sending: " + input_str[2])
+                print("Sending: " + msg)
                 outgoing.append(msg_enc(rec, name, msg))
 
             # ls TODO: -a
@@ -88,6 +87,11 @@ class ProcInput(threading.Thread):
                     incoming.remove(msg)
 
                     # TODO: Store removed messages in file
+
+            # ip
+            elif user_in == "ip":
+                print("Hostname: " + str(socket.gethostname()))
+                print("IP: " + str(socket.gethostbyname(socket.gethostname())))
 
             # debug
             elif user_in == "debug":
@@ -102,7 +106,8 @@ class ProcInput(threading.Thread):
             # help
             elif user_in == "help":
                 print("send <user> <msg>    Send a message to a specified user\n"
-                      "ls (-a)              List unread messages (-a to list all messages)\n"
+                      "ls                   List unread messages\n"
+                      "ip                   List endpoint's hostname and IP\n"
                       "debug                Toggle debug output\n" 
                       "exit                 Stop and exit application\n"
                       "help                 List available commands")
